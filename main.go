@@ -1,44 +1,38 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"time"
-
+	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
 	"github.com/skip2/go-qrcode"
+	"log"
+	"net/http"
 )
 
-func main() {
-	//Gerating secret
+func generateQRCode(c *gin.Context) {
 	secret, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "My App",
 		AccountName: "user@example.com",
 	})
 	if err != nil {
 		log.Fatal(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate secret"})
+		return
 	}
-	fmt.Println("Secret: ", secret.Secret())
 
-	//Generating QR code
 	qrCode, err := qrcode.Encode(secret.URL(), qrcode.Medium, 256)
 	if err != nil {
 		log.Fatal(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate QRCode"})
 	}
-	err = qrcode.WriteFile(secret.URL(), qrcode.Medium, 256, "qrcode.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(qrCode))
-	fmt.Println("QR Code saved successfully in qrcode.png")
 
-	//Gerating TOTP code
-	code, err := totp.GenerateCode(secret.Secret(), time.Now())
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Code: ", code)
+	c.Data(http.StatusOK, "image/png", []byte(qrCode))
+}
 
-	valid := totp.Validate(code, secret.Secret())
-	fmt.Println("Valid: ", valid)
+func main() {
+	router := gin.Default()
+	router.GET("/", generateQRCode)
+	err := router.Run(":8080")
+	if err != nil {
+		return
+	}
 }
