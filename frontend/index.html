@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multifactor Authentication</title>
+    <link rel="stylesheet" href="style.css">
+    <link href='https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css' rel='stylesheet'>
+</head>
+<body>
+<section class="container forms">
+    <div class="form login active">
+        <div class="form-content">
+            <header>Login</header>
+            <form id="loginFormSubmit">
+                <div class="field input-field">
+                    <input type="text" placeholder="Username" id="username" name="username" required>
+                </div>
+                <div class="field input-field">
+                    <input type="password" placeholder="Password" id="password" name="password" required>
+                    <i class='bx bx-hide eye-icon'></i>
+                </div>
+                <div class="field button-field">
+                    <button type="submit">Login</button>
+                </div>
+            </form>
+            <div id="loginMessage" class="form-link"></div>
+            <div class="form-link">
+                <span>Don't have an account? <a href="#" class="link signup-link">Signup</a></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="form signup">
+        <div class="form-content">
+            <header>Signup</header>
+            <form id="signupFormSubmit">
+                <div class="field input-field">
+                    <input type="text" placeholder="Username" id="newUsername" name="username" required>
+                </div>
+                <div class="field input-field">
+                    <input type="password" placeholder="Create password" id="newPassword" name="password" required>
+                    <i class='bx bx-hide eye-icon'></i>
+                </div>
+                <div class="field button-field">
+                    <button type="submit">Signup</button>
+                </div>
+            </form>
+            <div id="signupMessage" class="form-link"></div>
+            <div class="form-link">
+                <span>Already have an account? <a href="#" class="link login-link">Login</a></span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="protectedContent" style="display: none;">
+    <h1>Protected Content</h1>
+    <p>Welcome! This page is protected.</p>
+    <button id="logoutButton">Logout</button>
+</div>
+
+<script>
+    const forms = document.querySelector(".forms"),
+        links = document.querySelectorAll(".link");
+
+    links.forEach(link => {
+        link.addEventListener("click", e => {
+            e.preventDefault();
+            forms.classList.toggle("show-signup");
+        })
+    })
+
+    document.getElementById('loginFormSubmit').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+
+        fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+        })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Login failed');
+                }
+            })
+            .then(data => {
+                document.querySelector('.login').style.display = 'none';
+                document.getElementById('protectedContent').style.display = 'block';
+            })
+            .catch(error => {
+                document.getElementById('loginMessage').textContent = error.message;
+            });
+    });
+
+    document.getElementById('signupFormSubmit').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const newUsername = document.getElementById('newUsername').value;
+        const newPassword = document.getElementById('newPassword').value;
+
+        fetch('/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `username=${encodeURIComponent(newUsername)}&password=${encodeURIComponent(newPassword)}`
+        })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Signup failed');
+                }
+            })
+            .then(data => {
+                forms.classList.toggle("show-signup");
+            })
+            .catch(error => {
+                document.getElementById('signupMessage').textContent = error.message;
+            });
+    });
+
+    document.getElementById('logoutButton').addEventListener('click', function() {
+        const username = document.getElementById('username').value;
+        fetch('/logout', {
+            method: 'POST',
+            headers: {
+                'X-Csrf-Token': getCookie('csrf_token'),
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `username=${encodeURIComponent(username)}`
+        })
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('protectedContent').style.display = 'none';
+                    document.querySelector('.login').style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error("Logout error", error);
+            });
+    });
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+
+    const eyeIcons = document.querySelectorAll(".eye-icon");
+
+    eyeIcons.forEach(eyeIcon => {
+        eyeIcon.addEventListener("click", () => {
+            const passwordInput = eyeIcon.parentElement.querySelector("input");
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                eyeIcon.classList.replace("bx-hide", "bx-show");
+            } else {
+                passwordInput.type = "password";
+                eyeIcon.classList.replace("bx-show", "bx-hide");
+            }
+        });
+    });
+</script>
+</body>
+</html>
