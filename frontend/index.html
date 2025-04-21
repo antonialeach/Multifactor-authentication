@@ -52,13 +52,6 @@
     </div>
 </section>
 
-<div id="protectedContent" style="display: none;">
-    <h1>Protected Area</h1>
-    <p>Welcome to the secure area!</p>
-    <button id="logoutButton">Logout</button>
-    <div id="protectedMessage"></div>
-</div>
-
 <script>
     const forms = document.querySelector(".forms"),
         links = document.querySelectorAll(".link");
@@ -89,29 +82,12 @@
                 return response.text();
             })
             .then(() => {
-                document.querySelector('.login').style.display = 'none';
-                document.getElementById('protectedContent').style.display = 'block';
-
                 const csrfToken = getCookie('csrf_token');
-                document.querySelector('meta[name="csrf-token"]').setAttribute('content', csrfToken);
+                localStorage.setItem('csrf_token', csrfToken);
+                localStorage.setItem('username', username);
+                localStorage.setItem('session_token', getCookie('session_token'));
 
-                return fetch('/protected', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Csrf-Token': csrfToken
-                    },
-                    body: `username=${encodeURIComponent(username)}`
-                });
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Access denied to protected content');
-                }
-                return response.text();
-            })
-            .then(text => {
-                document.getElementById('protectedMessage').innerHTML = `<p>${text}</p>`;
+                window.location.href = '/protected.html';
             })
             .catch(error => {
                 document.getElementById('loginMessage').textContent = error.message;
@@ -141,29 +117,6 @@
             })
             .catch(error => {
                 document.getElementById('signupMessage').textContent = error.message;
-            });
-    });
-
-    document.getElementById('logoutButton').addEventListener('click', function () {
-        const username = document.getElementById('username').value;
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-        fetch('/logout', {
-            method: 'POST',
-            headers: {
-                'X-Csrf-Token': csrfToken,
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: `username=${encodeURIComponent(username)}`
-        })
-            .then(response => {
-                if (response.ok) {
-                    document.getElementById('protectedContent').style.display = 'none';
-                    document.querySelector('.login').style.display = 'block';
-                }
-            })
-            .catch(error => {
-                console.error("Logout error", error);
             });
     });
 

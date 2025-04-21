@@ -17,8 +17,6 @@ type Login struct {
 
 var db *sql.DB
 
-//var users = map[string]Login{}
-
 func main() {
 	var err error
 	db, err = sql.Open("sqlite", "./users.db")
