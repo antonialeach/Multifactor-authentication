@@ -77,7 +77,9 @@
         })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Login failed');
+                    return response.text().then(errorMessage => {
+                        throw new Error(errorMessage);
+                    });
                 }
                 return response.text();
             })
@@ -86,14 +88,12 @@
                 localStorage.setItem('csrf_token', csrfToken);
                 localStorage.setItem('username', username);
                 localStorage.setItem('session_token', getCookie('session_token'));
-
                 window.location.href = '/protected.html';
             })
             .catch(error => {
                 document.getElementById('loginMessage').textContent = error.message;
             });
     });
-
     document.getElementById('signupForm').addEventListener('submit', function (event) {
         event.preventDefault();
         const newUsername = document.getElementById('newUsername').value;
@@ -108,15 +108,18 @@
         })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Signup failed');
+                    return response.text().then(errorMessage => {
+                        throw new Error(errorMessage);
+                    });
                 }
                 return response.text();
             })
             .then(() => {
                 forms.classList.toggle("show-signup");
+                document.getElementById('signupMessage').textContent = "Signup successful. You can now log in.";
             })
             .catch(error => {
-                document.getElementById('signupMessage').textContent = error.message;
+                document.getElementById('signupMessage').textContent = error.message; 
             });
     });
 

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -54,7 +55,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Access-Control-Allow-Origin", "*") // Doar pt. test
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -69,15 +70,25 @@ func register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Login attempt: %s | Pass: %s\n", username, password)
+	fmt.Printf("Register attempt: %s | Pass: %s\n", username, password)
 
-	hashedPassword, _ := hashPassword(password)
-	_, err = db.Exec("INSERT INTO users (username, hashed_password) VALUES (?, ?)", username, hashedPassword)
+	hashedPassword, err := hashPassword(password)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
 
+	_, err = db.Exec("INSERT INTO users (username, hashed_password) VALUES (?, ?)", username, hashedPassword)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			http.Error(w, "Username already exists.", http.StatusConflict)
+			return
+		}
+		http.Error(w, "Database error during registration", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 	fmt.Println("User registered successfully")
 }
 
@@ -103,12 +114,16 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var hashedPassword string
 	err = db.QueryRow("SELECT hashed_password FROM users WHERE username = ?", username).Scan(&hashedPassword)
 	if err != nil {
-		http.Error(w, "Invalid username or password.", http.StatusUnauthorized)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid credentials. Username doesn't exist.", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Database error during login", http.StatusInternalServerError)
 		return
 	}
 
 	if !checkPasswordHash(password, hashedPassword) {
-		http.Error(w, "Invalid username or password.", http.StatusUnauthorized)
+		http.Error(w, "Invalid credentials. Wrong password.", http.StatusUnauthorized)
 		return
 	}
 
@@ -117,7 +132,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE users SET session_token = ?, csrf_token = ? WHERE username = ?", sessionToken, csrfToken, username)
 	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		http.Error(w, "Database error updating session", http.StatusInternalServerError)
 		return
 	}
 
@@ -139,6 +154,8 @@ func login(w http.ResponseWriter, r *http.Request) {
 		Secure:   false,
 		SameSite: http.SameSiteStrictMode,
 	})
+
+	w.WriteHeader(http.StatusOK)
 
 	fmt.Println("User logged in:", username)
 }
