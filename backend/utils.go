@@ -3,8 +3,9 @@ package main
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"golang.org/x/crypto/bcrypt"
 	"log"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func hashPassword(password string) (string, error) {

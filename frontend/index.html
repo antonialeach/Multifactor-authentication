@@ -1,25 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multifactor Authentication</title>
+    <meta charset="UTF-8" />
+    <meta name="csrf-token" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Secure Login Portal</title>
     <link rel="stylesheet" href="style.css">
-    <link href='https://unpkg.com/boxicons@2.1.2/css/boxicons.min.css' rel='stylesheet'>
 </head>
 <body>
 <section class="container forms">
     <div class="form login active">
         <div class="form-content">
             <header>Login</header>
-            <form id="loginFormSubmit">
+            <form id="loginForm">
                 <div class="field input-field">
-                    <input type="text" placeholder="Username" id="username" name="username" required>
+                    <input type="text" id="username" name="username" placeholder="Username" required />
                 </div>
                 <div class="field input-field">
-                    <input type="password" placeholder="Password" id="password" name="password" required>
-                    <i class='bx bx-hide eye-icon'></i>
+                    <input type="password" id="password" name="password" placeholder="Password" required />
                 </div>
                 <div class="field button-field">
                     <button type="submit">Login</button>
@@ -35,13 +33,12 @@
     <div class="form signup">
         <div class="form-content">
             <header>Signup</header>
-            <form id="signupFormSubmit">
+            <form id="signupForm">
                 <div class="field input-field">
-                    <input type="text" placeholder="Username" id="newUsername" name="username" required>
+                    <input type="text" id="newUsername" name="username" placeholder="Username" required />
                 </div>
                 <div class="field input-field">
-                    <input type="password" placeholder="Create password" id="newPassword" name="password" required>
-                    <i class='bx bx-hide eye-icon'></i>
+                    <input type="password" id="newPassword" name="password" placeholder="Password" required />
                 </div>
                 <div class="field button-field">
                     <button type="submit">Signup</button>
@@ -56,9 +53,10 @@
 </section>
 
 <div id="protectedContent" style="display: none;">
-    <h1>Protected Content</h1>
-    <p>Welcome! This page is protected.</p>
+    <h1>Protected Area</h1>
+    <p>Welcome to the secure area!</p>
     <button id="logoutButton">Logout</button>
+    <div id="protectedMessage"></div>
 </div>
 
 <script>
@@ -69,10 +67,10 @@
         link.addEventListener("click", e => {
             e.preventDefault();
             forms.classList.toggle("show-signup");
-        })
-    })
+        });
+    });
 
-    document.getElementById('loginFormSubmit').addEventListener('submit', function(event) {
+    document.getElementById('loginForm').addEventListener('submit', function (event) {
         event.preventDefault();
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
@@ -85,22 +83,42 @@
             body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
         })
             .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
+                if (!response.ok) {
                     throw new Error('Login failed');
                 }
+                return response.text();
             })
-            .then(data => {
+            .then(() => {
                 document.querySelector('.login').style.display = 'none';
                 document.getElementById('protectedContent').style.display = 'block';
+
+                const csrfToken = getCookie('csrf_token');
+                document.querySelector('meta[name="csrf-token"]').setAttribute('content', csrfToken);
+
+                return fetch('/protected', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Csrf-Token': csrfToken
+                    },
+                    body: `username=${encodeURIComponent(username)}`
+                });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Access denied to protected content');
+                }
+                return response.text();
+            })
+            .then(text => {
+                document.getElementById('protectedMessage').innerHTML = `<p>${text}</p>`;
             })
             .catch(error => {
                 document.getElementById('loginMessage').textContent = error.message;
             });
     });
 
-    document.getElementById('signupFormSubmit').addEventListener('submit', function(event) {
+    document.getElementById('signupForm').addEventListener('submit', function (event) {
         event.preventDefault();
         const newUsername = document.getElementById('newUsername').value;
         const newPassword = document.getElementById('newPassword').value;
@@ -113,13 +131,12 @@
             body: `username=${encodeURIComponent(newUsername)}&password=${encodeURIComponent(newPassword)}`
         })
             .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
+                if (!response.ok) {
                     throw new Error('Signup failed');
                 }
+                return response.text();
             })
-            .then(data => {
+            .then(() => {
                 forms.classList.toggle("show-signup");
             })
             .catch(error => {
@@ -127,12 +144,14 @@
             });
     });
 
-    document.getElementById('logoutButton').addEventListener('click', function() {
+    document.getElementById('logoutButton').addEventListener('click', function () {
         const username = document.getElementById('username').value;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
         fetch('/logout', {
             method: 'POST',
             headers: {
-                'X-Csrf-Token': getCookie('csrf_token'),
+                'X-Csrf-Token': csrfToken,
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             body: `username=${encodeURIComponent(username)}`
@@ -153,21 +172,6 @@
         const parts = value.split(`; ${name}=`);
         if (parts.length === 2) return parts.pop().split(';').shift();
     }
-
-    const eyeIcons = document.querySelectorAll(".eye-icon");
-
-    eyeIcons.forEach(eyeIcon => {
-        eyeIcon.addEventListener("click", () => {
-            const passwordInput = eyeIcon.parentElement.querySelector("input");
-            if (passwordInput.type === "password") {
-                passwordInput.type = "text";
-                eyeIcon.classList.replace("bx-hide", "bx-show");
-            } else {
-                passwordInput.type = "password";
-                eyeIcon.classList.replace("bx-show", "bx-hide");
-            }
-        });
-    });
 </script>
 </body>
 </html>

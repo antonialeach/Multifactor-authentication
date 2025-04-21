@@ -1,9 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type Login struct {
@@ -12,43 +15,69 @@ type Login struct {
 	CSRFToken      string
 }
 
-// Key is the username
-var users = map[string]Login{}
+var db *sql.DB
+
+//var users = map[string]Login{}
 
 func main() {
-	//4 endpoints
+	var err error
+	db, err = sql.Open("sqlite", "./users.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`
+                CREATE TABLE IF NOT EXISTS users (
+                        username TEXT PRIMARY KEY,
+                        hashed_password TEXT,
+                        session_token TEXT,
+                        csrf_token TEXT
+                )
+        `)
+	if err != nil {
+		panic(err)
+	}
+
 	http.HandleFunc("/register", register)
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/logout", logout)
-	http.HandleFunc("/protected", protected) //only accessible to logged-in users
+	http.HandleFunc("/protected", protected)
+
+	http.Handle("/", http.FileServer(http.Dir("./frontend")))
+
+	fmt.Println("Server running on http://localhost:8080")
 	http.ListenAndServe(":8080", nil)
 }
 
 func register(w http.ResponseWriter, r *http.Request) {
-
 	if r.Method != http.MethodPost {
-		err := http.StatusMethodNotAllowed
-		http.Error(w, "Invalid method", err)
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*") // Doar pt. test
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Cannot parse form", http.StatusBadRequest)
 		return
 	}
 
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	if len(username) < 5 || len(password) < 5 {
-		err := http.StatusNotAcceptable
-		http.Error(w, "Invalid username or password. Minimum 5 characters.", err)
+		http.Error(w, "Invalid username or password. Minimum 5 characters.", http.StatusNotAcceptable)
 		return
 	}
 
-	if _, ok := users[username]; ok {
-		err := http.StatusConflict
-		http.Error(w, "User already exists.", err)
-		return
-	}
+	fmt.Printf("Login attempt: %s | Pass: %s\n", username, password)
 
 	hashedPassword, _ := hashPassword(password)
-	users[username] = Login{
-		HashedPassword: hashedPassword,
+	_, err = db.Exec("INSERT INTO users (username, hashed_password) VALUES (?, ?)", username, hashedPassword)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
 	}
 
 	fmt.Println("User registered successfully")
@@ -56,71 +85,78 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 func login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		err := http.StatusMethodNotAllowed
-		http.Error(w, "Invalid method", err)
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Cannot parse form", http.StatusBadRequest)
 		return
 	}
 
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
-	user, ok := users[username]
+	fmt.Printf("Login attempt: %s | Pass: %s\n", username, password)
 
-	if !ok || !checkPasswordHash(password, user.HashedPassword) {
-		err := http.StatusUnauthorized
-		http.Error(w, "Invalid username or password.", err)
+	var hashedPassword string
+	err = db.QueryRow("SELECT hashed_password FROM users WHERE username = ?", username).Scan(&hashedPassword)
+	if err != nil {
+		http.Error(w, "Invalid username or password.", http.StatusUnauthorized)
+		return
+	}
+
+	if !checkPasswordHash(password, hashedPassword) {
+		http.Error(w, "Invalid username or password.", http.StatusUnauthorized)
 		return
 	}
 
 	sessionToken := generateToken(32)
-	csrfToken := generateToken(32) //Cross-Site-Request-Forgery
+	csrfToken := generateToken(32)
 
-	//Set session cookie
+	_, err = db.Exec("UPDATE users SET session_token = ?, csrf_token = ? WHERE username = ?", sessionToken, csrfToken, username)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    sessionToken,
 		Expires:  time.Now().Add(24 * time.Hour),
+		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 	})
-
-	//Set CSRF in a cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "csrf_token",
 		Value:    csrfToken,
 		Expires:  time.Now().Add(24 * time.Hour),
-		HttpOnly: false, //Needs to be accessible to the client-side
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   false,
+		SameSite: http.SameSiteStrictMode,
 	})
 
-	fmt.Printf("Before storing CSRF token: '%s'\n", csrfToken)
-	fmt.Printf("Before storing Session token: '%s'\n", sessionToken)
-
-	//Store tokens in the database
-	user.SessionToken = sessionToken
-	user.CSRFToken = csrfToken
-	users[username] = user
-
-	fmt.Printf("After storing CSRF token: '%s'\n", user.CSRFToken)
-	fmt.Printf("After storing Session token: '%s'\n", user.SessionToken)
-
-	fmt.Println("User logged in")
+	fmt.Println("User logged in:", username)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
-
 	if err := Authorize(r); err != nil {
-		er := http.StatusUnauthorized
-		http.Error(w, "Unauthorized", er)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	//Clear cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    "",
 		Expires:  time.Now().Add(-1 * time.Hour),
 		HttpOnly: true,
 	})
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     "csrf_token",
 		Value:    "",
@@ -128,30 +164,25 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: false,
 	})
 
-	//Clear the tokens from the database
 	username := r.FormValue("username")
-	user, _ := users[username]
-	user.SessionToken = ""
-	user.CSRFToken = ""
-	users[username] = user
-
-	fmt.Println("User logged out")
+	_, err := db.Exec("UPDATE users SET session_token = ?, csrf_token = ? WHERE username = ?", "", "", username)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	fmt.Println("User logged out:", username)
 }
 
 func protected(w http.ResponseWriter, r *http.Request) {
-
 	if r.Method != http.MethodPost {
-		err := http.StatusMethodNotAllowed
-		http.Error(w, "Invalid request method", err)
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if err := Authorize(r); err != nil {
-		er := http.StatusUnauthorized
-		http.Error(w, "Unauthorized", er)
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
 	}
 
-	username := r.FormValue("username")
-	fmt.Fprintf(w, "CSRF validation successful! Welcome, %s!", username)
+	w.Write([]byte("Welcome to the protected area, " + r.FormValue("username") + "!"))
 }

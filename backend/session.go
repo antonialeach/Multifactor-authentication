@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 )
 
@@ -10,34 +9,34 @@ var AuthError = errors.New("Unauthorized")
 
 func Authorize(r *http.Request) error {
 	username := r.FormValue("username")
-	fmt.Println("Username:", username)
-
-	user, ok := users[username]
-	if !ok {
-		fmt.Println("User not found.")
-		return AuthError
+	if username == "" {
+		return errors.New("username missing")
 	}
 
-	st, err := r.Cookie("session_token")
-	if err != nil || st.Value == "" || st.Value != user.SessionToken {
-		fmt.Println("Session token validation failed.")
-		if st != nil {
-			fmt.Printf("Session Token (Cookie): '%s'\n", st.Value)
-		} else {
-			fmt.Println("Session Token (Cookie): Cookie not found or error")
-		}
-		fmt.Printf("Session Token (Stored): '%s'\n", user.SessionToken)
-		return AuthError
+	sessionTokenCookie, err := r.Cookie("session_token")
+	if err != nil {
+		return errors.New("session token missing")
 	}
 
-	csrf := r.Header.Get("X-CSRF-Token")
-	if csrf == "" || csrf != user.CSRFToken {
-		fmt.Println("CSRF token validation failed.")
-		fmt.Printf("CSRF Token (Header): '%s'\n", csrf)
-		fmt.Printf("CSRF Token (Stored): '%s'\n", user.CSRFToken)
-		return AuthError
+	csrfTokenCookie, err := r.Cookie("csrf_token")
+	if err != nil {
+		return errors.New("csrf token missing")
 	}
 
-	fmt.Println("Authorization successful.")
+	csrfTokenHeader := r.Header.Get("X-Csrf-Token")
+	if csrfTokenHeader == "" {
+		return errors.New("csrf token header missing")
+	}
+
+	var storedSessionToken, storedCsrfToken string
+	err = db.QueryRow("SELECT session_token, csrf_token FROM users WHERE username = ?", username).Scan(&storedSessionToken, &storedCsrfToken)
+	if err != nil {
+		return errors.New("user not found or database error")
+	}
+
+	if sessionTokenCookie.Value != storedSessionToken || csrfTokenCookie.Value != storedCsrfToken || csrfTokenHeader != storedCsrfToken {
+		return errors.New("invalid session or csrf token")
+	}
+
 	return nil
 }
