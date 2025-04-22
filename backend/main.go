@@ -29,6 +29,7 @@ func main() {
 	_, err = db.Exec(`
                 CREATE TABLE IF NOT EXISTS users (
                         username TEXT PRIMARY KEY,
+                        email TEXT UNIQUE,
                         hashed_password TEXT,
                         session_token TEXT,
                         csrf_token TEXT
@@ -64,13 +65,15 @@ func register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := r.FormValue("username")
+	email := r.FormValue("email")
 	password := r.FormValue("password")
+
 	if len(username) < 5 || len(password) < 5 {
 		http.Error(w, "Invalid username or password. Minimum 5 characters.", http.StatusNotAcceptable)
 		return
 	}
 
-	fmt.Printf("Register attempt: %s | Pass: %s\n", username, password)
+	fmt.Printf("Register attempt: %s | Email: %s | Pass: %s\n", username, email, password)
 
 	hashedPassword, err := hashPassword(password)
 	if err != nil {
@@ -78,10 +81,14 @@ func register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec("INSERT INTO users (username, hashed_password) VALUES (?, ?)", username, hashedPassword)
+	_, err = db.Exec("INSERT INTO users (username, email, hashed_password) VALUES (?, ?, ?)", username, email, hashedPassword)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			http.Error(w, "Username already exists.", http.StatusConflict)
+			return
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: users.email") {
+			http.Error(w, "Email address already exists.", http.StatusConflict)
 			return
 		}
 		http.Error(w, "Database error during registration", http.StatusInternalServerError)

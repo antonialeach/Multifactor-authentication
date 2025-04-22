@@ -38,7 +38,13 @@
                     <input type="text" id="newUsername" name="username" placeholder="Username" required />
                 </div>
                 <div class="field input-field">
+                    <input type="email" id="newEmail" name="email" placeholder="Email" required />
+                </div>
+                <div class="field input-field">
                     <input type="password" id="newPassword" name="password" placeholder="Password" required />
+                </div>
+                <div class="field input-field">
+                    <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm Password" required />
                 </div>
                 <div class="field button-field">
                     <button type="submit">Signup</button>
@@ -96,15 +102,27 @@
     });
     document.getElementById('signupForm').addEventListener('submit', function (event) {
         event.preventDefault();
+
+        console.log("CONFIRM:", document.getElementById('confirmPassword'));
+        console.log("CONFIRM VALUE:", document.getElementById('confirmPassword').value);
+
         const newUsername = document.getElementById('newUsername').value;
+        const newEmail = document.getElementById('newEmail').value;
         const newPassword = document.getElementById('newPassword').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        const signupMessage = document.getElementById('signupMessage');
+
+        if (newPassword !== confirmPassword) {
+            signupMessage.textContent = "Passwords do not match.";
+            return;
+        }
 
         fetch('/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: `username=${encodeURIComponent(newUsername)}&password=${encodeURIComponent(newPassword)}`
+            body: `username=${encodeURIComponent(newUsername)}&email=${encodeURIComponent(newEmail)}&password=${encodeURIComponent(newPassword)}`
         })
             .then(response => {
                 if (!response.ok) {
