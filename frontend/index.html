@@ -94,7 +94,7 @@
                 localStorage.setItem('csrf_token', csrfToken);
                 localStorage.setItem('username', username);
                 localStorage.setItem('session_token', getCookie('session_token'));
-                window.location.href = '/protected.html';
+                window.location.href = '/2fa-choice.html';
             })
             .catch(error => {
                 document.getElementById('loginMessage').textContent = error.message;
@@ -102,10 +102,6 @@
     });
     document.getElementById('signupForm').addEventListener('submit', function (event) {
         event.preventDefault();
-
-        console.log("CONFIRM:", document.getElementById('confirmPassword'));
-        console.log("CONFIRM VALUE:", document.getElementById('confirmPassword').value);
-
         const newUsername = document.getElementById('newUsername').value;
         const newEmail = document.getElementById('newEmail').value;
         const newPassword = document.getElementById('newPassword').value;

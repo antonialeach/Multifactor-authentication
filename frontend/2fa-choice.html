@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choose Your 2FA Method</title>
+  <link rel="stylesheet" href="style.css"> </head>
+<body>
+<section class="container forms">
+  <div class="form active">
+    <div class="form-content">
+      <header>Choose Your Two-Factor Authentication</header>
+      <p>Please select your preferred method for two-factor authentication:</p>
+      <div class="field button-field">
+        <button id="enableTotp">Google Authenticator App</button>
+      </div>
+      <div class="field button-field">
+        <button id="enableEmailOtp">Email Password</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.getElementById('enableTotp').addEventListener('click', function() {
+    window.location.href = '/totp-setup.html';
+  });
+
+  document.getElementById('enableEmailOtp').addEventListener('click', function() {
+    window.location.href = '/email-otp-setup.html';
+  });
+</script>
+</body>
+</html>
