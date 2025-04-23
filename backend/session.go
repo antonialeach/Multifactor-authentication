@@ -7,36 +7,34 @@ import (
 
 var AuthError = errors.New("Unauthorized")
 
-func Authorize(r *http.Request) error {
-	username := r.FormValue("username")
-	if username == "" {
-		return errors.New("username missing")
-	}
-
-	sessionTokenCookie, err := r.Cookie("session_token")
+func Authorize(r *http.Request) (string, error) {
+	sessCookie, err := r.Cookie("session_token")
 	if err != nil {
-		return errors.New("session token missing")
+		return "", AuthError
 	}
 
-	csrfTokenCookie, err := r.Cookie("csrf_token")
+	csrfCookie, err := r.Cookie("csrf_token")
 	if err != nil {
-		return errors.New("csrf token missing")
+		return "", AuthError
 	}
 
-	csrfTokenHeader := r.Header.Get("X-Csrf-Token")
-	if csrfTokenHeader == "" {
-		return errors.New("csrf token header missing")
+	csrfHeader := r.Header.Get("X-Csrf-Token")
+	if csrfHeader == "" {
+		return "", AuthError
 	}
 
-	var storedSessionToken, storedCsrfToken string
-	err = db.QueryRow("SELECT session_token, csrf_token FROM users WHERE username = ?", username).Scan(&storedSessionToken, &storedCsrfToken)
+	var username, storedCsrf string
+	err = db.QueryRow(
+		"SELECT username, csrf_token FROM users WHERE session_token = ?",
+		sessCookie.Value,
+	).Scan(&username, &storedCsrf)
 	if err != nil {
-		return errors.New("user not found or database error")
+		return "", AuthError
 	}
 
-	if sessionTokenCookie.Value != storedSessionToken || csrfTokenCookie.Value != storedCsrfToken || csrfTokenHeader != storedCsrfToken {
-		return errors.New("invalid session or csrf token")
+	if storedCsrf != csrfCookie.Value || storedCsrf != csrfHeader {
+		return "", AuthError
 	}
 
-	return nil
+	return username, nil
 }
