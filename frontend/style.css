@@ -64,7 +64,7 @@ form{
 .field input{
     outline: none;
     padding: 0 15px;
-    border: 1px solid#CACACA;
+    border: 1px solid white;
 }
 .field input:focus{
     border-bottom-width: 2px;
@@ -155,7 +155,7 @@ img.google-img{
     object-fit: cover;
 }
 a.google{
-    border: 1px solid #CACACA;
+    border: 1px solid white;
 }
 a.google span{
     font-weight: 500;
@@ -173,3 +173,5 @@ a.google span{
     font-size: 1.5em;
     color: #000;
 }
+
+

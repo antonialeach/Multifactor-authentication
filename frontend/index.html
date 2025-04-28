@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Secure Login Portal</title>
     <link rel="stylesheet" href="style.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
 </head>
 <body>
 <section class="container forms">
@@ -18,6 +19,7 @@
                 </div>
                 <div class="field input-field">
                     <input type="password" id="password" name="password" placeholder="Password" required />
+                    <i class='bx bx-hide eye-icon'></i>
                 </div>
                 <div class="field button-field">
                     <button type="submit">Login</button>
@@ -42,9 +44,11 @@
                 </div>
                 <div class="field input-field">
                     <input type="password" id="newPassword" name="password" placeholder="Password" required />
+                    <i class='bx bx-hide eye-icon'></i>
                 </div>
                 <div class="field input-field">
                     <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm Password" required />
+                    <i class='bx bx-hide eye-icon'></i>
                 </div>
                 <div class="field button-field">
                     <button type="submit">Signup</button>
@@ -142,6 +146,21 @@
         const parts = value.split(`; ${name}=`);
         if (parts.length === 2) return parts.pop().split(';').shift();
     }
+
+    const eyeIcons = document.querySelectorAll(".eye-icon");
+
+    eyeIcons.forEach(eyeIcon => {
+        eyeIcon.addEventListener("click", () => {
+            const passwordInput = eyeIcon.parentElement.querySelector("input");
+            if (passwordInput.type === "password") {
+                passwordInput.type = "text";
+                eyeIcon.classList.replace("bx-hide", "bx-show");
+            } else {
+                passwordInput.type = "password";
+                eyeIcon.classList.replace("bx-show", "bx-hide");
+            }
+        });
+    });
 </script>
 </body>
 </html>
