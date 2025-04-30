@@ -2,9 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Email OTP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email Authentification</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
+<section class="container forms">
+    <div class="form active">
+        <div class="form-content">
+            <header>Check your email for code!</header>
+            <form id="totpSetupForm">
+                <div class="field input-field">
+                    <input type="text" id="totpCode" name="totp_code" placeholder="Enter TOTP Code" required />
+                </div>
+                <div class="field button-field">
+                    <button type="submit">Verify and Enable 2FA</button>
+                </div>
+            </form>
+            <div id="totpSetupMessage" class="form-link"></div>
+        </div>
+        </div>
+    </div>
+</section>
 
+<script>
+    const csrfToken = localStorage.getItem('csrf_token');
+
+    fetch('/send-otp-email', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            'X-Csrf-Token': csrfToken
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => { throw new Error(text) });
+            }
+            return response.json();
+        })
+        .catch(error => {
+            qrCodeMessage.textContent = "Error: " + error.message;
+        });
+
+    totpSetupForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+        const totpCode = document.getElementById('totpCode').value;
+
+        fetch('/verify-totp-setup', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Csrf-Token': csrfToken
+            },
+            body: `totp_code=${encodeURIComponent(totpCode)}`
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text) });
+                }
+                return response.text();
+            })
+            .then(() => {
+                window.location.href = '/protected.html';
+            })
+            .catch(error => {
+                totpSetupMessage.textContent = error.message;
+            });
+    });
+</script>
 </body>
 </html>

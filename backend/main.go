@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/joho/godotenv"
+	"github.com/pquerna/otp/totp"
+	"gopkg.in/gomail.v2"
+	"log"
+	_ "modernc.org/sqlite"
 	"net/http"
+	"os"
 	"strings"
 	"time"
-
-	"github.com/pquerna/otp/totp"
-	_ "modernc.org/sqlite"
 )
 
 var db *sql.DB
@@ -42,6 +45,7 @@ func main() {
 	http.HandleFunc("/protected", protected)
 	http.HandleFunc("/generate-totp-setup", generateTOTPSetup)
 	http.HandleFunc("/verify-totp-setup", verifyTOTPSetup)
+	http.HandleFunc("/send-otp-email", sendGoMail)
 
 	http.Handle("/", http.FileServer(http.Dir("./frontend")))
 
@@ -221,4 +225,58 @@ func verifyTOTPSetup(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("TOTP verified"))
+}
+
+func init() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+}
+
+func sendGoMail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Cannot parse form", http.StatusBadRequest)
+		return
+	}
+
+	username, err := Authorize(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var userEmail string
+	err = db.QueryRow("SELECT email FROM users WHERE username = ?", username).Scan(&userEmail)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	email := os.Getenv("GMAIL_ADDRESS")
+	password := os.Getenv("GMAIL_APP_PASSWORD")
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", email)
+	m.SetHeader("To", userEmail)
+	m.SetHeader("Subject", "Your verification code from MyApp")
+
+	message := "Here is your verification code: 123456. If you did not request this, please ignore this message."
+	m.SetBody("text/plain", message)
+
+	d := gomail.NewDialer("smtp.gmail.com", 587, email, password)
+
+	if err := d.DialAndSend(m); err != nil {
+		http.Error(w, "Failed to send email", http.StatusInternalServerError)
+		fmt.Println("Email error:", err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
