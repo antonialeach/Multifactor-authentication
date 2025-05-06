@@ -46,6 +46,7 @@ func main() {
 	http.HandleFunc("/generate-totp-setup", generateTOTPSetup)
 	http.HandleFunc("/verify-totp-setup", verifyTOTPSetup)
 	http.HandleFunc("/send-otp-email", sendGoMail)
+	http.HandleFunc("/verify-otp-setup", verifyOTPSetup)
 
 	http.Handle("/", http.FileServer(http.Dir("./frontend")))
 
@@ -234,6 +235,8 @@ func init() {
 	}
 }
 
+var otpStore = make(map[string]string)
+
 func sendGoMail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
@@ -259,6 +262,9 @@ func sendGoMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	otp := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+	otpStore[username] = otp
+
 	email := os.Getenv("GMAIL_ADDRESS")
 	password := os.Getenv("GMAIL_APP_PASSWORD")
 
@@ -267,7 +273,7 @@ func sendGoMail(w http.ResponseWriter, r *http.Request) {
 	m.SetHeader("To", userEmail)
 	m.SetHeader("Subject", "Your verification code from MyApp")
 
-	message := "Here is your verification code: 123456. If you did not request this, please ignore this message."
+	message := fmt.Sprintf("Here is your verification code: %s.\nIf you did not request this, please ignore this message.", otp)
 	m.SetBody("text/plain", message)
 
 	d := gomail.NewDialer("smtp.gmail.com", 587, email, password)
@@ -279,4 +285,36 @@ func sendGoMail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "OTP sent"})
+}
+
+func verifyOTPSetup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Cannot parse form", http.StatusBadRequest)
+		return
+	}
+
+	username, err := Authorize(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userInput := r.FormValue("otp_code")
+	expected := otpStore[username]
+
+	if expected == "" || userInput != expected {
+		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		return
+	}
+
+	delete(otpStore, username)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OTP verified"))
 }

@@ -11,16 +11,16 @@
 <section class="container forms">
     <div class="form active">
         <div class="form-content">
-            <header>Check your email for code!</header>
-            <form id="totpSetupForm">
+            <header>Enter the 6-digit code from your email</header>
+            <form id="otpSetupForm">
                 <div class="field input-field">
-                    <input type="text" id="totpCode" name="totp_code" placeholder="Enter TOTP Code" required />
+                    <input type="text" id="otpCode" name="otp_code" placeholder="Enter TOTP Code" required />
                 </div>
                 <div class="field button-field">
                     <button type="submit">Verify and Enable 2FA</button>
                 </div>
             </form>
-            <div id="totpSetupMessage" class="form-link"></div>
+            <div id="otpSetupMessage" class="form-link"></div>
         </div>
         </div>
     </div>
@@ -43,21 +43,22 @@
             return response.json();
         })
         .catch(error => {
-            qrCodeMessage.textContent = "Error: " + error.message;
+            document.getElementById('otpSetupMessage').textContent = "Error: " + error.message;
         });
 
-    totpSetupForm.addEventListener('submit', function(event) {
+    const otpSetupForm = document.getElementById('otpSetupForm');
+    otpSetupForm.addEventListener('submit', function(event) {
         event.preventDefault();
-        const totpCode = document.getElementById('totpCode').value;
+        const otpCode = document.getElementById('otpCode').value;
 
-        fetch('/verify-totp-setup', {
+        fetch('/verify-otp-setup', {
             method: 'POST',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-Csrf-Token': csrfToken
             },
-            body: `totp_code=${encodeURIComponent(totpCode)}`
+            body: `otp_code=${encodeURIComponent(otpCode)}`
         })
             .then(response => {
                 if (!response.ok) {
@@ -69,7 +70,7 @@
                 window.location.href = '/protected.html';
             })
             .catch(error => {
-                totpSetupMessage.textContent = error.message;
+                document.getElementById('otpSetupMessage').textContent = error.message;
             });
     });
 </script>
