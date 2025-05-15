@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/joho/godotenv"
 	"github.com/pquerna/otp/totp"
@@ -13,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var db *sql.DB
@@ -54,6 +57,33 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
+func isValidPassword(password string) bool {
+	var (
+		hasMinLen  = false
+		hasUpper   = false
+		hasLower   = false
+		hasNumber  = false
+		hasSpecial = false
+	)
+
+	if len(password) >= 8 {
+		hasMinLen = true
+	}
+	for _, ch := range password {
+		switch {
+		case unicode.IsUpper(ch):
+			hasUpper = true
+		case unicode.IsLower(ch):
+			hasLower = true
+		case unicode.IsDigit(ch):
+			hasNumber = true
+		case unicode.IsPunct(ch) || unicode.IsSymbol(ch):
+			hasSpecial = true
+		}
+	}
+	return hasMinLen && hasUpper && hasLower && hasNumber && hasSpecial
+}
+
 func register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
@@ -70,8 +100,21 @@ func register(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	email := r.FormValue("email")
 	password := r.FormValue("password")
-	if len(username) < 5 || len(password) < 5 {
-		http.Error(w, "Invalid username or password. Minimum 5 characters.", http.StatusNotAcceptable)
+
+	if len(username) < 5 {
+		http.Error(w, "Invalid username. The username must have minimum 5 characters.", http.StatusNotAcceptable)
+		return
+	}
+
+	var exitingUser string
+	err = db.QueryRow("SELECT username FROM users WHERE username = ?", username).Scan(&exitingUser)
+	if !errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "Username already exists", http.StatusConflict)
+		return
+	}
+
+	if !isValidPassword(password) {
+		http.Error(w, "Invalid password. The password must have minimum 8 characters, uppercase, lowercase, digit and special symbol. ", http.StatusNotAcceptable)
 		return
 	}
 
@@ -235,7 +278,29 @@ func init() {
 	}
 }
 
-var otpStore = make(map[string]string)
+type OTPEntry struct {
+	Code      string
+	CreatedAt time.Time
+}
+
+var otpStore = make(map[string]OTPEntry)
+
+const otpChars = "1234567890"
+
+func GenerateOTP(length int) (string, error) {
+	buffer := make([]byte, length)
+	_, err := rand.Read(buffer)
+	if err != nil {
+		return "", err
+	}
+
+	otpCharsLength := len(otpChars)
+	for i := 0; i < length; i++ {
+		buffer[i] = otpChars[int(buffer[i])%otpCharsLength]
+	}
+
+	return string(buffer), nil
+}
 
 func sendGoMail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -262,8 +327,11 @@ func sendGoMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	otp := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
-	otpStore[username] = otp
+	otp, _ := GenerateOTP(6)
+	otpStore[username] = OTPEntry{
+		Code:      otp,
+		CreatedAt: time.Now(),
+	}
 
 	email := os.Getenv("GMAIL_ADDRESS")
 	password := os.Getenv("GMAIL_APP_PASSWORD")
@@ -273,7 +341,7 @@ func sendGoMail(w http.ResponseWriter, r *http.Request) {
 	m.SetHeader("To", userEmail)
 	m.SetHeader("Subject", "Your verification code from MyApp")
 
-	message := fmt.Sprintf("Here is your verification code: %s.\nIf you did not request this, please ignore this message.", otp)
+	message := fmt.Sprintf("Here is your verification code: %s.\nThis code will expire in 5 minutes.\nIf you did not request this, please ignore this message.", otp)
 	m.SetBody("text/plain", message)
 
 	d := gomail.NewDialer("smtp.gmail.com", 587, email, password)
@@ -306,10 +374,16 @@ func verifyOTPSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userInput := r.FormValue("otp_code")
-	expected := otpStore[username]
 
-	if expected == "" || userInput != expected {
+	entry, exists := otpStore[username]
+	if !exists || userInput != entry.Code {
 		http.Error(w, "Invalid code", http.StatusUnauthorized)
+		return
+	}
+
+	if time.Since(entry.CreatedAt) > 5*time.Minute {
+		delete(otpStore, username)
+		http.Error(w, "OTP expired", http.StatusUnauthorized)
 		return
 	}
 

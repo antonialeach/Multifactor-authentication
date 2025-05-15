@@ -1,99 +1,182 @@
 # Multifactor Authentication (Go)
 
-This application demonstrates a basic secure login portal implemented in Go, utilizing password-based authentication with CSRF protection.
+This application demonstrates a basic secure login portal implemented in Go, utilizing password-based authentication with CSRF protection and user-selected two-factor authentication (2FA).
 
 ## Overview
 
-This project includes a backend API written in Go for user registration, login, accessing a protected area, and logout. The frontend consists of HTML and JavaScript for user interaction.
+This project includes a backend API written in Go for user registration, login, 2FA configuration, and protected session access. The frontend is built with HTML and JavaScript for user interaction.
 
 **Key Features:**
 
-* **User Registration:** Allows new users to create accounts.
-* **Login:** Authenticates existing users using their username and password.
-* **Protected Area:** An area accessible only to authenticated users, protected by CSRF tokens.
-* **Logout:** Allows authenticated users to end their session.
-* **CSRF Protection:** Implements CSRF (Cross-Site Request Forgery) protection using tokens to enhance security.
+* **User Registration** – Create new user accounts.
+* **Login** – Authenticate users using their credentials.
+* **2FA Method Selection** – Upon login, users must choose between:
+
+    * **TOTP (Time-based One-Time Password)** using Google Authenticator app.
+    * **Email OTP** (One-Time Password sent to the user’s registered email).
+* **Protected Area** – Accessible only after completing 2FA.
+* **Logout** – Securely end user sessions.
+* **CSRF Protection** – Protects sensitive actions via CSRF tokens.
+* **Email Integration** – Sends OTPs using Gmail (requires credentials in `.env`).
 
 ## Getting Started
 
-To test the application, follow these steps:
+### 1. Prerequisites
 
-### 1. Build and Run the Backend
+* Go 1.18 or newer
+* SQLite
+* `.env` file with your Gmail credentials:
 
-1.  Open your file explorer or IDE.
-2.  Navigate to the `backend` directory within your `Multifactor-authentication` project.
-3.  **Right-click within the `backend` directory.**
-4.  **Select the option that executes the Go build command.** This option might be labeled differently depending on your IDE or system integration, but it should effectively run:
-    ```
-    go build multifactor-authentification/backend
-    ```
-    This will create an executable file named `backend` (or `backend.exe` on Windows) within the `backend` directory.
-5.  **Run the backend executable.** You can do this by:
-    * **Double-clicking** the `backend` or `backend.exe` file in your file explorer.
-    * **Opening a terminal in the `backend` directory** and running:
-        ```bash
-        ./backend
-        ```
-        (or `backend.exe` on Windows)
+  ```
+  GMAIL_ADDRESS=your-email@gmail.com
+  GMAIL_APP_PASSWORD=your-app-password
+  ```
 
-    This will start the backend server, likely listening on `http://localhost:8080`.
+### 2. Build and Run the Backend
 
-### 2. Access the Frontend
+1. Navigate to the `backend` directory.
+2. Run the build command:
 
-1.  Open your web browser and navigate to `http://localhost:8080`. The `index.html` file in the `frontend` directory should be served, providing the login and signup interface.
+   ```bash
+   go build
+   ```
+3. Start the backend:
 
-### 3. Testing the API Endpoints
+   ```bash
+   ./backend
+   ```
 
-You can also use a tool like Postman or `curl` to directly interact with the API endpoints:
+Server starts at: `http://localhost:8080`
 
-#### Register
+### 3. Access the Frontend
 
-* **Method:** `POST`
-* **URL:** `http://localhost:8080/register`
-* **Body (x-www-form-urlencoded):**
-    ```
-    username=<your_desired_username>
-    password=<your_desired_password>
-    ```
-* Click "Send" to register a new user.
+Open your browser and go to: `http://localhost:8080`
+This loads the main interface (`index.html`) for registration and login.
 
-#### Login
+---
 
-* **Method:** `POST`
-* **URL:** `http://localhost:8080/login`
-* **Body (x-www-form-urlencoded):**
-    ```
-    username=<your_registered_username>
-    password=<your_registered_password>
-    ```
-* After successful login via the frontend, a `session_token` and `csrf_token` cookie will be set in your browser. If testing with Postman, you'll need to inspect the response headers and manage cookies manually for subsequent requests.
+## Workflow
 
-#### Protected
+### Registration
 
-* **Method:** `POST`
-* **URL:** `http://localhost:8080/protected`
-* **Headers:**
-    * `Content-Type`: `application/x-www-form-urlencoded`
-    * `X-Csrf-Token`: `<value_of_the_csrf_token_cookie_from_login>`
-* **Body (x-www-form-urlencoded):**
-    ```
-    username=<your_logged_in_username>
-    ```
-* Click "Send" to access the protected area. Ensure you include the `X-Csrf-Token` header with the value of the `csrf_token` cookie obtained during the login process.
+1. Sign up with a unique username, email, and password.
+2. Upon registration, a TOTP secret is automatically generated and stored.
 
-#### Logout
+### Login & 2FA Setup
 
-* **Method:** `POST`
-* **URL:** `http://localhost:8080/logout`
-* **Headers:**
-    * `Content-Type`: `application/x-www-form-urlencoded`
-    * `X-Csrf-Token`: `<value_of_the_csrf_token_cookie_from_login>`
-* **Body (x-www-form-urlencoded):**
-    ```
-    username=<your_logged_in_username>
-    ```
-* Click "Send" to log out the specified user. Ensure you include the `X-Csrf-Token` header with the value of the `csrf_token` cookie.
+1. Enter username and password to login.
+2. Choose your preferred 2FA method:
 
-**Note on Frontend Interaction:**
+    * **TOTP:** Scan a QR code with Google Authenticator. Enter the 6-digit TOTP.
+    * **Email OTP:** A 6-digit one-time code is emailed. Enter it within 5 minutes.
+3. Upon successful verification, access to the protected area is granted.
 
-The primary way to interact with this application is through the provided HTML interface in the `frontend` directory. After successful login via the web browser, you will be redirected to the `/protected.html` page. The JavaScript on this page handles the display of the welcome message and the logout functionality, including sending the CSRF token with the logout request.
+### Protected Area
+
+Accessible only after full login and successful 2FA. Displays a welcome message and includes logout functionality.
+
+### Logout
+
+Ends the session and invalidates the CSRF and session tokens.
+
+---
+
+## API Endpoints
+
+### POST `/register`
+
+Registers a new user.
+
+**Form Data:**
+
+```
+username=<string>
+email=<string>
+password=<string>
+```
+
+---
+
+### POST `/login`
+
+Logs in an existing user.
+
+**Form Data:**
+
+```
+username=<string>
+password=<string>
+```
+
+Returns session & CSRF cookies.
+
+---
+
+### POST `/send-otp-email`
+
+Triggers sending an OTP to the user's email.
+
+Headers:
+
+* `X-Csrf-Token: <token>`
+
+---
+
+### POST `/verify-otp-setup`
+
+Verifies the entered email OTP.
+
+**Form Data:**
+
+```
+otp_code=<6-digit-code>
+```
+
+---
+
+### POST `/verify-totp-setup`
+
+Verifies the entered TOTP from Google Authenticator.
+
+**Form Data:**
+
+```
+totp_code=<6-digit-code>
+```
+
+---
+
+### GET `/generate-totp-setup`
+
+Returns a URI to generate a QR code for the authenticator app.
+
+---
+
+### POST `/protected`
+
+Access the protected area.
+
+Headers:
+
+* `X-Csrf-Token: <token>`
+
+---
+
+### POST `/logout`
+
+Ends the user session.
+
+Headers:
+
+* `X-Csrf-Token: <token>`
+
+---
+
+## Security Notes
+
+* OTP codes (email-based) expire after **5 minutes**.
+* TOTP codes are validated using standard time-based algorithms.
+* Passwords are securely hashed.
+* CSRF tokens protect all sensitive endpoints.
+
+
